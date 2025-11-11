@@ -8,10 +8,10 @@ from collections import Counter
 
 st.set_page_config(page_title="Fake News Detection (Ensemble Model)", layout="centered")
 
-# === Base path ===
+# === Base directory ===
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-# === Text cleaning ===
+# === Clean text ===
 def clean_text(text):
     text = text.lower()
     text = re.sub(r"http\S+", " ", text)
@@ -19,7 +19,7 @@ def clean_text(text):
     text = re.sub(r"\s+", " ", text).strip()
     return text
 
-# === Safe loader ===
+# === Safe load function ===
 def safe_load(filename):
     full_path = os.path.join(BASE_DIR, filename)
     if not os.path.exists(full_path):
@@ -35,19 +35,19 @@ def safe_load(filename):
             st.error(f"❌ Failed to load {filename}: {e}")
             return None
 
-# === Load models ===
+# === Load all models ===
 @st.cache_resource
 def load_models():
     tfidf = safe_load("tfidf_vectorizer_new.pkl")
     svm = safe_load("svm_model_v1.pkl")
     nb = safe_load("naive_bayes_model_v2.pkl")
-    bert_xgb = safe_load("bert_xgb_wrapper.pkl")   # ✅ Wrapper model (not plain XGB)
+    bert_xgb = safe_load("bert_xgb_wrapper.pkl")
     le = safe_load("label_encoder.joblib")
     return tfidf, svm, nb, bert_xgb, le
 
 tfidf, svm_model, nb_model, bert_xgb_model, label_encoder = load_models()
 
-# === Predict helper ===
+# === Helper: prediction function ===
 def predict_model(model, X, label_encoder=None):
     try:
         if hasattr(model, "predict_proba"):
@@ -83,7 +83,7 @@ if st.button("Predict"):
         else:
             X_tfidf = tfidf.transform([cleaned_text])
 
-            # --- Predictions for SVM & NB ---
+            # --- Predictions (SVM + NB) ---
             svm_pred, svm_conf = predict_model(svm_model, X_tfidf, label_encoder)
             nb_pred, nb_conf = predict_model(nb_model, X_tfidf, label_encoder)
 
@@ -91,11 +91,11 @@ if st.button("Predict"):
             bert_pred, bert_conf = "N/A", None
             try:
                 if isinstance(bert_xgb_model, dict):
-                    bert_model = bert_xgb_model.get("bert_model") or bert_xgb_model.get("bert")
-                    xgb_model = bert_xgb_model.get("xgb_model") or bert_xgb_model.get("xgb")
+                    bert_model = bert_xgb_model.get("embed_model_name")
+                    xgb_model = bert_xgb_model.get("xgb_model")
 
                     if bert_model is not None and xgb_model is not None:
-                        # Encode text with BERT
+                        # Generate BERT embeddings for the input text
                         embedding = bert_model.encode([cleaned_text])
                         # Predict using XGBoost
                         pred = xgb_model.predict(embedding)[0]
@@ -106,14 +106,14 @@ if st.button("Predict"):
                             conf = 1.0
                         bert_pred, bert_conf = pred, conf
                     else:
-                        raise ValueError("Missing 'bert_model' or 'xgb_model' key in wrapper dict.")
+                        raise ValueError("Missing 'embed_model_name' or 'xgb_model' in wrapper dict.")
                 else:
-                    # If wrapper is a class instance with predict()
+                    # If wrapper is class-based
                     bert_pred, bert_conf = predict_model(bert_xgb_model, [cleaned_text], label_encoder)
             except Exception as e:
                 bert_pred, bert_conf = f"Error: {e}", None
 
-            # --- Display Individual Model Results ---
+            # --- Display results ---
             st.subheader("📊 Individual Model Predictions")
             col1, col2, col3 = st.columns(3)
             with col1:
@@ -123,11 +123,16 @@ if st.button("Predict"):
             with col3:
                 st.metric("BERT+XGBoost Prediction", bert_pred, f"Confidence: {bert_conf:.2f}" if bert_conf else "")
 
-            # --- Ensemble Voting ---
+            # --- Ensemble voting ---
             predictions = [svm_pred, nb_pred, bert_pred]
             valid_preds = [p for p in predictions if not str(p).startswith("Error")]
+
             if valid_preds:
                 final_label = Counter(valid_preds).most_common(1)[0][0]
+                # Convert to readable label (if numeric)
+                if isinstance(final_label, (int, np.integer)):
+                    final_label = "Fake" if final_label == 0 else "Real"
+
                 st.markdown("---")
                 st.subheader("🧩 Ensemble Final Prediction")
                 st.success(f"**Final Verdict:** {final_label}")
@@ -137,5 +142,3 @@ if st.button("Predict"):
 
 st.markdown("---")
 st.caption("Built with ❤️ using Streamlit + Ensemble Learning (SVM + NB + BERT+XGBoost wrapper).")
-
-
