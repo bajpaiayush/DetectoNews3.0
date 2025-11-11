@@ -17,27 +17,28 @@ def clean_text(text):
     return text
 
 # ========== SAFE LOAD FUNCTION ==========
-def safe_load(path):
-    if not os.path.exists(path):
-        st.warning(f"⚠️ File not found: {path}")
+def safe_load(filename):
+    """Safely load pickle/joblib file from current directory."""
+    if not os.path.exists(filename):
+        st.warning(f"⚠️ File not found: {filename}")
         return None
     try:
-        return joblib.load(path)
+        return joblib.load(filename)
     except Exception:
         try:
-            with open(path, "rb") as f:
+            with open(filename, "rb") as f:
                 return pickle.load(f)
         except Exception as e:
-            st.error(f"❌ Failed to load {path}: {e}")
+            st.error(f"❌ Failed to load {filename}: {e}")
             return None
 
 # ========== LOAD MODELS ==========
 @st.cache_resource
 def load_models():
-    tfidf = safe_load("tfidf_vectorizer.pkl")
+    tfidf = safe_load("tfidf_vectorizer_new.pkl")     # ✅ updated filename
     svm = safe_load("svm_model_v1.pkl")
     nb = safe_load("naive_bayes_model_v2.pkl")
-    bert_xgb = safe_load("bert_xgb_model.pkl")  # wrapper ko ignore karna hai
+    bert_xgb = safe_load("bert_xgb_model.pkl")
     le = safe_load("label_encoder.joblib")
     return tfidf, svm, nb, bert_xgb, le
 
@@ -74,35 +75,38 @@ if st.button("Predict"):
         st.warning("Please enter some text.")
     else:
         cleaned_text = clean_text(text_input)
-        X_tfidf = tfidf.transform([cleaned_text])
-
-        # Predict using individual models
-        svm_pred, svm_conf = predict_model(svm_model, X_tfidf, label_encoder)
-        nb_pred, nb_conf = predict_model(nb_model, X_tfidf, label_encoder)
-        bert_pred, bert_conf = predict_model(bert_xgb_model, [cleaned_text], label_encoder)
-
-        # Display individual model results
-        st.subheader("📊 Individual Model Predictions")
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.metric("SVM Prediction", svm_pred, f"Confidence: {svm_conf:.2f}" if svm_conf else "")
-        with col2:
-            st.metric("Naive Bayes Prediction", nb_pred, f"Confidence: {nb_conf:.2f}" if nb_conf else "")
-        with col3:
-            st.metric("BERT+XGBoost Prediction", bert_pred, f"Confidence: {bert_conf:.2f}" if bert_conf else "")
-
-        # Ensemble voting
-        predictions = [svm_pred, nb_pred, bert_pred]
-        valid_preds = [p for p in predictions if not str(p).startswith("Error")]
-
-        if valid_preds:
-            final_label = Counter(valid_preds).most_common(1)[0][0]
-            st.markdown("---")
-            st.subheader("🧩 Ensemble Final Prediction")
-            st.success(f"**Final Verdict:** {final_label}")
-            st.write(f"Votes → {Counter(valid_preds)}")
+        if tfidf is None:
+            st.error("TF-IDF Vectorizer not loaded. Check file name (should be tfidf_vectorizer_new.pkl).")
         else:
-            st.error("No valid predictions could be made. Check models or vectorizer compatibility.")
+            X_tfidf = tfidf.transform([cleaned_text])
+
+            # Predict using individual models
+            svm_pred, svm_conf = predict_model(svm_model, X_tfidf, label_encoder)
+            nb_pred, nb_conf = predict_model(nb_model, X_tfidf, label_encoder)
+            bert_pred, bert_conf = predict_model(bert_xgb_model, [cleaned_text], label_encoder)
+
+            # Display individual model results
+            st.subheader("📊 Individual Model Predictions")
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("SVM Prediction", svm_pred, f"Confidence: {svm_conf:.2f}" if svm_conf else "")
+            with col2:
+                st.metric("Naive Bayes Prediction", nb_pred, f"Confidence: {nb_conf:.2f}" if nb_conf else "")
+            with col3:
+                st.metric("BERT+XGBoost Prediction", bert_pred, f"Confidence: {bert_conf:.2f}" if bert_conf else "")
+
+            # Ensemble voting
+            predictions = [svm_pred, nb_pred, bert_pred]
+            valid_preds = [p for p in predictions if not str(p).startswith("Error")]
+
+            if valid_preds:
+                final_label = Counter(valid_preds).most_common(1)[0][0]
+                st.markdown("---")
+                st.subheader("🧩 Ensemble Final Prediction")
+                st.success(f"**Final Verdict:** {final_label}")
+                st.write(f"Votes → {Counter(valid_preds)}")
+            else:
+                st.error("No valid predictions could be made. Check models or vectorizer compatibility.")
 
 st.markdown("---")
 st.caption("Built with ❤️ using Streamlit and Ensemble Learning (SVM + NB + BERT+XGBoost).")
