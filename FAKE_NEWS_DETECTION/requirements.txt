@@ -4,3 +4,4 @@ numpy
 pandas
 joblib
 xgboost
+sentence-transformers
