@@ -79,41 +79,41 @@ if st.button("Predict"):
     else:
         cleaned_text = clean_text(text_input)
         if tfidf is None:
-            st.error("TF-IDF vectorizer not loaded. Check file name.")
+            st.error("TF-IDF Vectorizer not loaded. Check file name.")
         else:
             X_tfidf = tfidf.transform([cleaned_text])
 
-            # --- Predictions ---
+            # --- Predictions for SVM & NB ---
             svm_pred, svm_conf = predict_model(svm_model, X_tfidf, label_encoder)
             nb_pred, nb_conf = predict_model(nb_model, X_tfidf, label_encoder)
-           # ----- BERT + XGB Prediction (custom dictionary fix) -----
-bert_pred, bert_conf = "N/A", None
-try:
-    if isinstance(bert_xgb_model, dict):
-        bert_model = bert_xgb_model.get("bert_model") or bert_xgb_model.get("bert")
-        xgb_model = bert_xgb_model.get("xgb_model") or bert_xgb_model.get("xgb")
 
-        if bert_model is not None and xgb_model is not None:
-            # Generate embedding from BERT model
-            embedding = bert_model.encode([cleaned_text])
-            # Predict with XGBoost
-            pred = xgb_model.predict(embedding)[0]
-            if hasattr(xgb_model, "predict_proba"):
-                prob = xgb_model.predict_proba(embedding)
-                conf = float(np.max(prob))
-            else:
-                conf = 1.0
-            bert_pred, bert_conf = pred, conf
-        else:
-            raise ValueError("Missing 'bert_model' or 'xgb_model' key in wrapper dict.")
-    else:
-        # fallback if wrapper is a class instance
-        bert_pred, bert_conf = predict_model(bert_xgb_model, [cleaned_text], label_encoder)
-except Exception as e:
-    bert_pred, bert_conf = f"Error: {e}", None
+            # --- BERT + XGB (dict wrapper fix) ---
+            bert_pred, bert_conf = "N/A", None
+            try:
+                if isinstance(bert_xgb_model, dict):
+                    bert_model = bert_xgb_model.get("bert_model") or bert_xgb_model.get("bert")
+                    xgb_model = bert_xgb_model.get("xgb_model") or bert_xgb_model.get("xgb")
 
+                    if bert_model is not None and xgb_model is not None:
+                        # Encode text with BERT
+                        embedding = bert_model.encode([cleaned_text])
+                        # Predict using XGBoost
+                        pred = xgb_model.predict(embedding)[0]
+                        if hasattr(xgb_model, "predict_proba"):
+                            prob = xgb_model.predict_proba(embedding)
+                            conf = float(np.max(prob))
+                        else:
+                            conf = 1.0
+                        bert_pred, bert_conf = pred, conf
+                    else:
+                        raise ValueError("Missing 'bert_model' or 'xgb_model' key in wrapper dict.")
+                else:
+                    # If wrapper is a class instance with predict()
+                    bert_pred, bert_conf = predict_model(bert_xgb_model, [cleaned_text], label_encoder)
+            except Exception as e:
+                bert_pred, bert_conf = f"Error: {e}", None
 
-            # --- Display individual results ---
+            # --- Display Individual Model Results ---
             st.subheader("📊 Individual Model Predictions")
             col1, col2, col3 = st.columns(3)
             with col1:
@@ -137,4 +137,5 @@ except Exception as e:
 
 st.markdown("---")
 st.caption("Built with ❤️ using Streamlit + Ensemble Learning (SVM + NB + BERT+XGBoost wrapper).")
+
 
