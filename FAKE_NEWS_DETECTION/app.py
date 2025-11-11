@@ -47,7 +47,7 @@ def load_models():
     tfidf = safe_load("tfidf_vectorizer_new.pkl")
     svm = safe_load("svm_model_v1.pkl")
     nb = safe_load("naive_bayes_model_v2.pkl")
-    bert_xgb = safe_load("bert_xgb_wrapper.pkl")
+    bert_xgb = safe_load("bert_xgb_wrapper_fixed.pkl")
     le = safe_load("label_encoder.joblib")
     return tfidf, svm, nb, bert_xgb, le
 
@@ -145,3 +145,4 @@ if st.button("Predict"):
 
 st.markdown("---")
 st.caption("Built with ❤️ using Streamlit + Ensemble Learning (SVM + NB + BERT+XGBoost wrapper).")
+
