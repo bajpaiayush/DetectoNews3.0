@@ -8,7 +8,9 @@ from collections import Counter
 
 st.set_page_config(page_title="Fake News Detection (Ensemble Model)", layout="centered")
 
-# ========== CLEANING FUNCTION ==========
+# Base directory where this app.py resides
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
 def clean_text(text):
     text = text.lower()
     text = re.sub(r"http\S+", " ", text)
@@ -16,26 +18,24 @@ def clean_text(text):
     text = re.sub(r"\s+", " ", text).strip()
     return text
 
-# ========== SAFE LOAD FUNCTION ==========
 def safe_load(filename):
-    """Safely load pickle/joblib file from current directory."""
-    if not os.path.exists(filename):
-        st.warning(f"⚠️ File not found: {filename}")
+    full_path = os.path.join(BASE_DIR, filename)
+    if not os.path.exists(full_path):
+        st.warning(f"⚠️ File not found: {full_path}")
         return None
     try:
-        return joblib.load(filename)
+        return joblib.load(full_path)
     except Exception:
         try:
-            with open(filename, "rb") as f:
+            with open(full_path, "rb") as f:
                 return pickle.load(f)
         except Exception as e:
             st.error(f"❌ Failed to load {filename}: {e}")
             return None
 
-# ========== LOAD MODELS ==========
 @st.cache_resource
 def load_models():
-    tfidf = safe_load("tfidf_vectorizer_new.pkl")     # ✅ updated filename
+    tfidf = safe_load("tfidf_vectorizer_new.pkl")           # Update if filename different
     svm = safe_load("svm_model_v1.pkl")
     nb = safe_load("naive_bayes_model_v2.pkl")
     bert_xgb = safe_load("bert_xgb_model.pkl")
@@ -44,7 +44,6 @@ def load_models():
 
 tfidf, svm_model, nb_model, bert_xgb_model, label_encoder = load_models()
 
-# ========== HELPER: PREDICT FUNCTION ==========
 def predict_model(model, X, label_encoder=None):
     try:
         if hasattr(model, "predict_proba"):
@@ -64,28 +63,25 @@ def predict_model(model, X, label_encoder=None):
     except Exception as e:
         return f"Error: {e}", None
 
-# ========== STREAMLIT UI ==========
 st.title("📰 Fake News Detection (Ensemble-Based App)")
-st.write("Predicts whether a news article is **Fake or Real** using SVM, Naive Bayes, and BERT+XGBoost — then combines them via ensemble voting.")
+st.write("Predicts whether a news article is Fake or Real using SVM, Naive Bayes, and BERT+XGBoost — then combines them via ensemble voting.")
 
 text_input = st.text_area("Enter News Article Text", height=250)
 
 if st.button("Predict"):
-    if text_input.strip() == "":
+    if not text_input.strip():
         st.warning("Please enter some text.")
     else:
         cleaned_text = clean_text(text_input)
         if tfidf is None:
-            st.error("TF-IDF Vectorizer not loaded. Check file name (should be tfidf_vectorizer_new.pkl).")
+            st.error("TF-IDF vectorizer not loaded. Check file name.")
         else:
             X_tfidf = tfidf.transform([cleaned_text])
 
-            # Predict using individual models
             svm_pred, svm_conf = predict_model(svm_model, X_tfidf, label_encoder)
             nb_pred, nb_conf = predict_model(nb_model, X_tfidf, label_encoder)
             bert_pred, bert_conf = predict_model(bert_xgb_model, [cleaned_text], label_encoder)
 
-            # Display individual model results
             st.subheader("📊 Individual Model Predictions")
             col1, col2, col3 = st.columns(3)
             with col1:
@@ -95,7 +91,6 @@ if st.button("Predict"):
             with col3:
                 st.metric("BERT+XGBoost Prediction", bert_pred, f"Confidence: {bert_conf:.2f}" if bert_conf else "")
 
-            # Ensemble voting
             predictions = [svm_pred, nb_pred, bert_pred]
             valid_preds = [p for p in predictions if not str(p).startswith("Error")]
 
@@ -109,4 +104,4 @@ if st.button("Predict"):
                 st.error("No valid predictions could be made. Check models or vectorizer compatibility.")
 
 st.markdown("---")
-st.caption("Built with ❤️ using Streamlit and Ensemble Learning (SVM + NB + BERT+XGBoost).")
+st.caption("Built with ❤️ using Streamlit + Ensemble Learning (SVM + NB + BERT+XGBoost).")
