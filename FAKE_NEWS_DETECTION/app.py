@@ -5,7 +5,8 @@ import re
 import os
 import numpy as np
 from collections import Counter
-from sentence_transformers import SentenceTransformer
+from sentence_transformers import SentenceTransformer  # ✅ Needed for BERT embeddings
+
 st.set_page_config(page_title="Fake News Detection (Ensemble Model)", layout="centered")
 
 # === Base directory ===
@@ -19,7 +20,7 @@ def clean_text(text):
     text = re.sub(r"\s+", " ", text).strip()
     return text
 
-# === Safe load function ===
+# === Safe load ===
 def safe_load(filename):
     full_path = os.path.join(BASE_DIR, filename)
     if not os.path.exists(full_path):
@@ -35,7 +36,12 @@ def safe_load(filename):
             st.error(f"❌ Failed to load {filename}: {e}")
             return None
 
-# === Load all models ===
+# === Cache the BERT model so it doesn't reload every time ===
+@st.cache_resource
+def get_bert_model(model_name):
+    return SentenceTransformer(model_name)
+
+# === Load models ===
 @st.cache_resource
 def load_models():
     tfidf = safe_load("tfidf_vectorizer_new.pkl")
@@ -47,7 +53,7 @@ def load_models():
 
 tfidf, svm_model, nb_model, bert_xgb_model, label_encoder = load_models()
 
-# === Helper: prediction function ===
+# === Predict helper ===
 def predict_model(model, X, label_encoder=None):
     try:
         if hasattr(model, "predict_proba"):
@@ -83,11 +89,11 @@ if st.button("Predict"):
         else:
             X_tfidf = tfidf.transform([cleaned_text])
 
-            # --- Predictions (SVM + NB) ---
+            # --- Predictions for SVM + NB ---
             svm_pred, svm_conf = predict_model(svm_model, X_tfidf, label_encoder)
             nb_pred, nb_conf = predict_model(nb_model, X_tfidf, label_encoder)
 
-            # --- BERT + XGB (dict wrapper fix) ---
+            # --- BERT + XGBoost (dict wrapper fix) ---
             bert_pred, bert_conf = "N/A", None
             try:
                 if isinstance(bert_xgb_model, dict):
@@ -95,14 +101,8 @@ if st.button("Predict"):
                     xgb_model = bert_xgb_model.get("xgb_model")
 
                     if bert_model_name is not None and xgb_model is not None:
-                        # Load SentenceTransformer from model name
-    
-                        bert_model = SentenceTransformer(bert_model_name)
-
-                        # Generate embeddings for input text
+                        bert_model = get_bert_model(bert_model_name)
                         embedding = bert_model.encode([cleaned_text])
-
-                        # Predict using XGBoost
                         pred = xgb_model.predict(embedding)[0]
                         if hasattr(xgb_model, "predict_proba"):
                             prob = xgb_model.predict_proba(embedding)
@@ -113,7 +113,6 @@ if st.button("Predict"):
                     else:
                         raise ValueError("Missing 'embed_model_name' or 'xgb_model' in wrapper dict.")
                 else:
-                    # If wrapper is class-based
                     bert_pred, bert_conf = predict_model(bert_xgb_model, [cleaned_text], label_encoder)
             except Exception as e:
                 bert_pred, bert_conf = f"Error: {e}", None
@@ -130,11 +129,10 @@ if st.button("Predict"):
 
             # --- Ensemble voting ---
             predictions = [svm_pred, nb_pred, bert_pred]
-            valid_preds = [p for p in predictions if not str(p).startswith("Error")]
+            valid_preds = [p for p in predictions if not str(p).startswith("Error") and p != "N/A"]
 
             if valid_preds:
                 final_label = Counter(valid_preds).most_common(1)[0][0]
-                # Convert to readable label (if numeric)
                 if isinstance(final_label, (int, np.integer)):
                     final_label = "Fake" if final_label == 0 else "Real"
 
@@ -147,4 +145,3 @@ if st.button("Predict"):
 
 st.markdown("---")
 st.caption("Built with ❤️ using Streamlit + Ensemble Learning (SVM + NB + BERT+XGBoost wrapper).")
-
