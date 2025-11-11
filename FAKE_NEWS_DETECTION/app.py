@@ -5,7 +5,7 @@ import re
 import os
 import numpy as np
 from collections import Counter
-
+from sentence_transformers import SentenceTransformer
 st.set_page_config(page_title="Fake News Detection (Ensemble Model)", layout="centered")
 
 # === Base directory ===
@@ -91,12 +91,17 @@ if st.button("Predict"):
             bert_pred, bert_conf = "N/A", None
             try:
                 if isinstance(bert_xgb_model, dict):
-                    bert_model = bert_xgb_model.get("embed_model_name")
+                    bert_model_name = bert_xgb_model.get("embed_model_name")
                     xgb_model = bert_xgb_model.get("xgb_model")
 
-                    if bert_model is not None and xgb_model is not None:
-                        # Generate BERT embeddings for the input text
+                    if bert_model_name is not None and xgb_model is not None:
+                        # Load SentenceTransformer from model name
+    
+                        bert_model = SentenceTransformer(bert_model_name)
+
+                        # Generate embeddings for input text
                         embedding = bert_model.encode([cleaned_text])
+
                         # Predict using XGBoost
                         pred = xgb_model.predict(embedding)[0]
                         if hasattr(xgb_model, "predict_proba"):
@@ -142,3 +147,4 @@ if st.button("Predict"):
 
 st.markdown("---")
 st.caption("Built with ❤️ using Streamlit + Ensemble Learning (SVM + NB + BERT+XGBoost wrapper).")
+
