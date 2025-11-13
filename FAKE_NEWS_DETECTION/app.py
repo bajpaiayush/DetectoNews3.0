@@ -7,7 +7,7 @@ import numpy as np
 from collections import Counter
 from sentence_transformers import SentenceTransformer  # Needed for BERT embeddings
 
-st.set_page_config(page_title="Fake News Detection (Ensemble Model)", layout="centered")
+st.set_page_config(page_title="Fake News Detection", layout="centered")
 
 # === Base directory ===
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -78,7 +78,7 @@ def predict_model(model, X, label_encoder=None):
         return f"Error: {e}", None
 
 # === UI ===
-st.title("📰 Fake News Detection (Ensemble-Based App)")
+st.title("📰 Fake News Detection")
 st.write("Predicts whether a news article is **Fake or Real** using SVM, Naive Bayes, and BERT+XGBoost — then combines them via ensemble voting.")
 
 text_input = st.text_area("Enter News Article Text", height=250)
@@ -165,3 +165,4 @@ if st.button("Predict"):
 
 st.markdown("---")
 st.caption("Built with ❤️ using Streamlit + Ensemble Learning (SVM + NB + BERT+XGBoost wrapper).")
+
