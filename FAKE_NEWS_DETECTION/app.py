@@ -56,30 +56,42 @@ tfidf, svm_model, nb_model, bert_xgb_model, label_encoder = load_models()
 # === Predict helper ===
 def predict_model(model, X, label_encoder=None):
     try:
-        if hasattr(model, "predict_proba"):
-            probs = model.predict_proba(X)
-            pred_idx = np.argmax(probs, axis=1)[0]
-            pred_label = model.classes_[pred_idx]
-            conf = probs[0, pred_idx]
-        else:
-            pred_label = model.predict(X)[0]
-            conf = 1.0
+        pred_label = model.predict(X)[0]
         if label_encoder is not None:
             try:
                 pred_label = label_encoder.inverse_transform([pred_label])[0]
             except Exception:
                 pass
-        return pred_label, conf
+        return pred_label
     except Exception as e:
-        return f"Error: {e}", None
+        return f"Error: {e}"
+
+# === Map predictions to True/False ===
+def map_to_bool_label(pred):
+    if isinstance(pred, str) and pred.lower() in ["fake", "false", "0"]:
+        return "False"
+    if isinstance(pred, str) and pred.lower() in ["real", "true", "1"]:
+        return "True"
+    if isinstance(pred, (int, np.integer)):
+        return "True" if pred == 1 else "False"
+    return str(pred)
 
 # === Streamlit UI ===
 st.title("📰 Fake News Detection (Ensemble-Based App)")
-st.write("Predicts whether a news article is **Fake or Real** using SVM, Naive Bayes, and BERT+XGBoost — then combines them via ensemble voting.")
+st.write("Predicts whether a news article is **True or False** using SVM, Naive Bayes, and BERT+XGBoost — then combines them via ensemble voting.")
 
 text_input = st.text_area("Enter News Article Text", height=250)
 
-if st.button("Predict"):
+col_btn1, col_btn2 = st.columns(2)
+with col_btn1:
+    predict_clicked = st.button("Predict")
+with col_btn2:
+    clear_clicked = st.button("Clear Text")
+
+if clear_clicked:
+    st.experimental_rerun()
+
+if predict_clicked:
     if not text_input.strip():
         st.warning("Please enter some text.")
     else:
@@ -90,11 +102,11 @@ if st.button("Predict"):
             X_tfidf = tfidf.transform([cleaned_text])
 
             # --- Predictions for SVM + NB ---
-            svm_pred, svm_conf = predict_model(svm_model, X_tfidf, label_encoder)
-            nb_pred, nb_conf = predict_model(nb_model, X_tfidf, label_encoder)
+            svm_pred = predict_model(svm_model, X_tfidf, label_encoder)
+            nb_pred = predict_model(nb_model, X_tfidf, label_encoder)
 
             # --- BERT + XGBoost (dict wrapper fix) ---
-            bert_pred, bert_conf = "N/A", None
+            bert_pred = "N/A"
             try:
                 if isinstance(bert_xgb_model, dict):
                     bert_model_name = bert_xgb_model.get("embed_model_name")
@@ -104,37 +116,35 @@ if st.button("Predict"):
                         bert_model = get_bert_model(bert_model_name)
                         embedding = bert_model.encode([cleaned_text])
                         pred = xgb_model.predict(embedding)[0]
-                        if hasattr(xgb_model, "predict_proba"):
-                            prob = xgb_model.predict_proba(embedding)
-                            conf = float(np.max(prob))
-                        else:
-                            conf = 1.0
-                        bert_pred, bert_conf = pred, conf
+                        bert_pred = pred
                     else:
                         raise ValueError("Missing 'embed_model_name' or 'xgb_model' in wrapper dict.")
                 else:
-                    bert_pred, bert_conf = predict_model(bert_xgb_model, [cleaned_text], label_encoder)
+                    bert_pred = predict_model(bert_xgb_model, [cleaned_text], label_encoder)
             except Exception as e:
-                bert_pred, bert_conf = f"Error: {e}", None
+                bert_pred = f"Error: {e}"
 
-            # --- Display results ---
+            # === Convert all to True/False text ===
+            svm_pred_label = map_to_bool_label(svm_pred)
+            nb_pred_label = map_to_bool_label(nb_pred)
+            bert_pred_label = map_to_bool_label(bert_pred)
+
+            # --- Display results (no confidence) ---
             st.subheader("📊 Individual Model Predictions")
             col1, col2, col3 = st.columns(3)
             with col1:
-                st.metric("SVM Prediction", svm_pred, f"Confidence: {svm_conf:.2f}" if svm_conf else "")
+                st.metric("SVM Prediction", svm_pred_label)
             with col2:
-                st.metric("Naive Bayes Prediction", nb_pred, f"Confidence: {nb_conf:.2f}" if nb_conf else "")
+                st.metric("Naive Bayes Prediction", nb_pred_label)
             with col3:
-                st.metric("BERT+XGBoost Prediction", bert_pred, f"Confidence: {bert_conf:.2f}" if bert_conf else "")
+                st.metric("BERT+XGBoost Prediction", bert_pred_label)
 
             # --- Ensemble voting ---
-            predictions = [svm_pred, nb_pred, bert_pred]
+            predictions = [svm_pred_label, nb_pred_label, bert_pred_label]
             valid_preds = [p for p in predictions if not str(p).startswith("Error") and p != "N/A"]
 
             if valid_preds:
                 final_label = Counter(valid_preds).most_common(1)[0][0]
-                if isinstance(final_label, (int, np.integer)):
-                    final_label = "Fake" if final_label == 0 else "Real"
 
                 st.markdown("---")
                 st.subheader("🧩 Ensemble Final Prediction")
@@ -145,4 +155,3 @@ if st.button("Predict"):
 
 st.markdown("---")
 st.caption("Built with ❤️ using Streamlit + Ensemble Learning (SVM + NB + BERT+XGBoost wrapper).")
-
