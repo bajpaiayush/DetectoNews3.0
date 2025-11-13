@@ -80,7 +80,11 @@ def map_to_bool_label(pred):
 st.title("📰 Fake News Detection (Ensemble-Based App)")
 st.write("Predicts whether a news article is **True or False** using SVM, Naive Bayes, and BERT+XGBoost — then combines them via ensemble voting.")
 
-text_input = st.text_area("Enter News Article Text", height=250)
+# use session_state for the text area so we can clear it reliably
+if "input_text" not in st.session_state:
+    st.session_state["input_text"] = ""
+
+text_input = st.text_area("Enter News Article Text", height=250, key="input_text")
 
 col_btn1, col_btn2 = st.columns(2)
 with col_btn1:
@@ -88,14 +92,15 @@ with col_btn1:
 with col_btn2:
     clear_clicked = st.button("Clear Text")
 
+# Clear button: update session_state (no experimental_rerun)
 if clear_clicked:
-    st.experimental_rerun()
+    st.session_state["input_text"] = ""
 
 if predict_clicked:
-    if not text_input.strip():
+    if not st.session_state["input_text"].strip():
         st.warning("Please enter some text.")
     else:
-        cleaned_text = clean_text(text_input)
+        cleaned_text = clean_text(st.session_state["input_text"])
         if tfidf is None:
             st.error("TF-IDF Vectorizer not loaded. Check file name.")
         else:
@@ -152,6 +157,4 @@ if predict_clicked:
                 st.write(f"Votes → {Counter(valid_preds)}")
             else:
                 st.error("No valid predictions could be made. Check models or vectorizer compatibility.")
-
-st.markdown("---")
 
