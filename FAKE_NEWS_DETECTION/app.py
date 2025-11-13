@@ -154,4 +154,4 @@ if predict_clicked:
                 st.error("No valid predictions could be made. Check models or vectorizer compatibility.")
 
 st.markdown("---")
-st.caption("Built with ❤️ using Streamlit + Ensemble Learning (SVM + NB + BERT+XGBoost wrapper).")
+
